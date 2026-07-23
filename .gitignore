@@ -1,0 +1,26 @@
+# Misc
+.DS_Store
+.idea
+dist/
+.build/
+
+# Xcode / SwiftPM 用户本地状态（跟别人协作时这些每个人都不一样，不该提交）
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+# 万一你以后用 `swift package generate-xcodeproj` 或者直接拖进 Xcode 建了工程文件
+*.xcodeproj/
+!*.xcodeproj/project.pbxproj   # 如果确实要提交 xcodeproj，pbxproj 本体一般要保留，只排除里面的用户状态
+
+# 编译产物 / 调试符号
+*.dSYM
+*.dSYM.zip
+
+# 常见编辑器/系统噪音
+*.swp
+*~
+.vscode/
+Thumbs.db
