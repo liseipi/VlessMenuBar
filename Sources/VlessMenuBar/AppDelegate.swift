@@ -12,9 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // 必须有这一步：Cmd+C / Cmd+V / Cmd+X / Cmd+A 这些标准编辑快捷键在 macOS 上
         // 是通过"主菜单里有没有对应的 Edit 菜单项"来路由的，不是文本框自己天生就会
-        // 响应这几个按键。这个 App 一直没有设置过 NSApp.mainMenu，所以哪怕主窗口
-        // 临时切到 .regular 策略显示了出来，菜单栏也是空的，导致所有表单文本框
-        // 都没法用快捷键复制粘贴，只能靠右键菜单（如果有的话）。
+        // 响应这几个按键。.accessory 策略的 App 默认没有主菜单，不设置的话
+        // 所有表单文本框都没法用快捷键复制粘贴，只能靠右键菜单（如果有的话）。
         buildMainMenu()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -81,20 +80,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.center()
         window.isReleasedWhenClosed = false
         mainWindow = window
-
-        // 用户直接点窗口左上角的红色关闭按钮时也走到这里（不只是点状态栏图标切换），
-        // 保持两种关闭方式的行为一致：回到纯状态栏模式，不留 Dock 图标。
-        NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: window,
-            queue: .main
-        ) { _ in
-            NSApp.setActivationPolicy(.accessory)
-        }
     }
 
     private func showMainWindow() {
-        NSApp.setActivationPolicy(.regular) // 主窗口打开时短暂出现在 Dock，方便切换；关闭后可以再切回 accessory
+        // 不再切成 .regular——不管主窗口开不开，这个 App 都只保留菜单栏图标，
+        // 不出现在 Dock（底部任务栏）里。.accessory 策略下的 App 一样可以正常
+        // 显示窗口、接收键盘输入、弹出自己的菜单栏（Cmd+C/V 那些也一样能用），
+        // 唯一的区别就是不占 Dock 图标。
         NSApp.activate(ignoringOtherApps: true)
         mainWindow?.makeKeyAndOrderFront(nil)
     }
@@ -106,7 +98,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             if mainWindow?.isVisible == true {
                 mainWindow?.orderOut(nil)
-                NSApp.setActivationPolicy(.accessory)
             } else {
                 showMainWindow()
             }
