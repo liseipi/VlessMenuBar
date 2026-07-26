@@ -23,35 +23,31 @@ final class ProxyProcess {
         let resourceName = arch == "arm64"
             ? "vless-ws-client-darwin-arm64"
             : "vless-ws-client-darwin-amd64"
-        let bundleName = "VlessMenuBar_VlessMenuBar.bundle"
-        let bundleBases: [URL?] = [
-            Bundle.main.resourceURL,
-            Bundle.main.executableURL?.deletingLastPathComponent(),
-            Bundle.main.bundleURL,
-        ]
 
-        var candidates: [URL] = [
-            Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/\(resourceName)"),
-        ]
-        for base in bundleBases {
-            if let base {
-                candidates.append(base.appendingPathComponent("\(bundleName)/\(resourceName)"))
+        if let resourceDir = Bundle.main.resourceURL {
+            let candidate = resourceDir.appendingPathComponent(resourceName)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                try ensureExecutable(candidate)
+                return candidate
             }
         }
 
-        guard let url = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+        guard let url = Bundle.module.url(forResource: resourceName, withExtension: nil) else {
             throw NSError(domain: "VlessMenuBar", code: 1, userInfo: [
-                NSLocalizedDescriptionKey: "找不到内置的可执行文件 \(resourceName)，App 打包可能不完整"
+                NSLocalizedDescriptionKey: "找不到内置的可执行文件 \(resourceName)（既不在 Contents/Resources 也不在 Bundle.module 里），App 打包不完整"
             ])
         }
+        try ensureExecutable(url)
+        return url
+    }
 
+    private func ensureExecutable(_ url: URL) throws {
         var attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         let currentPerm = (attrs[.posixPermissions] as? NSNumber)?.uint16Value ?? 0
         if currentPerm & 0o111 == 0 {
             attrs[.posixPermissions] = NSNumber(value: UInt16(0o755))
             try FileManager.default.setAttributes(attrs, ofItemAtPath: url.path)
         }
-        return url
     }
 
     private static func currentArch() -> String {
