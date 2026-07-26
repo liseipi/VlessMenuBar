@@ -23,9 +23,6 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     }
 }
 
-/// 整个 App 的中枢状态：节点列表、当前跑的是哪个节点、运行状态、
-/// 本地代理全局设置、系统代理开关状态、日志。
-/// 所有 SwiftUI 页面都通过 @EnvironmentObject 拿到同一份 AppStore。
 final class AppStore: ObservableObject {
     @Published var profiles: [ProxyProfile] = []
     @Published var activeProfileID: UUID?
@@ -61,8 +58,6 @@ final class AppStore: ObservableObject {
         }
     }
 
-    // MARK: - 节点管理
-
     func addProfile(_ profile: ProxyProfile) {
         profiles.append(profile)
         if activeProfileID == nil { activeProfileID = profile.id }
@@ -74,7 +69,6 @@ final class AppStore: ObservableObject {
         profiles[idx] = profile
         persistProfiles()
         if profile.id == activeProfileID, isRunning {
-            // 正在用的这个节点被改了，重启一下让新配置生效。
             restart()
         }
     }
@@ -100,8 +94,6 @@ final class AppStore: ObservableObject {
         ProfileStore.save(profiles: profiles, activeID: activeProfileID)
     }
 
-    // MARK: - 本地代理设置（全局，跟具体节点无关）
-
     func updateLocalSettings(_ settings: LocalProxySettings) {
         let wasRunning = isRunning
         localSettings = settings
@@ -110,8 +102,6 @@ final class AppStore: ObservableObject {
             restart()
         }
     }
-
-    // MARK: - 启停
 
     func start() {
         guard let profile = activeProfile else {
@@ -153,19 +143,11 @@ final class AppStore: ObservableObject {
         if case .failed = status { stopUptimeTimer() }
     }
 
-    // MARK: - 运行时长（纯本地计时，不依赖任何网络请求）
-
     private func startUptimeTimer() {
         stopUptimeTimer()
         startedAt = Date()
         uptimeSeconds = 0
         uptimeTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            // 不直接在 Timer 的回调里改 @Published 属性——Timer 回调虽然本来就在
-            // 主线程上跑，但它触发的时机有可能和 SwiftUI 当前正在进行的一次视图
-            // 渲染撞在一起，直接改会报 "Publishing changes from within view
-            // updates is not allowed"（未定义行为，长期可能导致界面状态错乱）。
-            // 用 DispatchQueue.main.async 把实际赋值推迟到下一个 run loop 轮次，
-            // 跟当前这次渲染事务彻底分开，就不会有这个问题了。
             DispatchQueue.main.async {
                 guard let self, let startedAt = self.startedAt else { return }
                 self.uptimeSeconds = Int(Date().timeIntervalSince(startedAt))
@@ -180,8 +162,6 @@ final class AppStore: ObservableObject {
         uptimeSeconds = 0
     }
 
-    // MARK: - 系统代理
-
     func toggleSystemProxy() {
         if systemProxyIsOn {
             SystemProxyManager.disableSystemProxy()
@@ -194,8 +174,6 @@ final class AppStore: ObservableObject {
             systemProxyIsOn = SystemProxyManager.enableSystemProxy(port: localSettings.localPort)
         }
     }
-
-    // MARK: - 日志
 
     private func appendLog(_ text: String) {
         logLines.append(text)

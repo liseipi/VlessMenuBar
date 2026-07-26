@@ -16,8 +16,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - 状态横幅（对应截图顶部橙色边框那一条）
-
     private var statusBanner: some View {
         HStack {
             HStack(spacing: 14) {
@@ -98,8 +96,6 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - 统计卡片
-
     private var statsCards: some View {
         HStack(spacing: 16) {
             statCard(
@@ -130,7 +126,6 @@ struct DashboardView: View {
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.1)))
     }
 
-    /// 把秒数格式化成 HH:MM:SS，代理没在跑就显示 "—"。
     private func formattedUptime(_ seconds: Int) -> String {
         guard store.isRunning else { return "—" }
         let h = seconds / 3600
@@ -138,8 +133,6 @@ struct DashboardView: View {
         let s = seconds % 60
         return String(format: "%02d:%02d:%02d", h, m, s)
     }
-
-    // MARK: - 当前节点信息表
 
     private var currentNodeSection: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -182,8 +175,6 @@ struct DashboardView: View {
             if !isLast { Divider() }
         }
     }
-
-    // MARK: - 功能状态
 
     private var featureStatusSection: some View {
         VStack(alignment: .leading, spacing: 0) {

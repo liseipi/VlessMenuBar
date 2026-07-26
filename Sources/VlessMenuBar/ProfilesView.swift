@@ -93,13 +93,11 @@ struct ProfilesView: View {
         }
     }
 
-    // MARK: - 节点列表每一行
-
     private func profileRow(_ profile: ProxyProfile) -> some View {
         HStack {
             Image(systemName: profile.id == store.activeProfileID ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(profile.id == store.activeProfileID ? .green : .secondary)
-                .padding(6) // 光一个 SF Symbol 的图形边界太小了，加点内边距扩大可点击范围
+                .padding(6)
                 .contentShape(Rectangle())
                 .onTapGesture { store.setActiveProfile(profile.id) }
                 .help("设为当前使用的节点")
@@ -119,8 +117,6 @@ struct ProfilesView: View {
                     .background(Capsule().fill(Color.green.opacity(0.15)))
             }
 
-            // 常用操作直接露出来，加了统一的内边距扩大点击热区，
-            // 图标本身很小，不加 padding 很容易点空或者点到旁边那个。
             Button {
                 copyLink(profile)
             } label: {
@@ -152,9 +148,6 @@ struct ProfilesView: View {
             .contentShape(Rectangle())
             .help("编辑")
 
-            // 不常用、有风险的操作（导出文件、删除）收进一个"更多"菜单里，
-            // 避免五个图标挤在一起容易点错——尤其是"删除"紧挨着其他按钮时
-            // 很容易手滑点到，放进菜单要多一步确认，安全一些。
             Menu {
                 Button {
                     exportToFile(profile)
@@ -178,15 +171,12 @@ struct ProfilesView: View {
         .padding(.vertical, 4)
     }
 
-    // sheet(item:) 需要 Binding<Item?>，手动包一层方便复用。
     private var sheetBinding: Binding<ProxyProfile?> {
         Binding(get: { editingProfile }, set: { editingProfile = $0 })
     }
     private var qrSheetBinding: Binding<ProxyProfile?> {
         Binding(get: { qrSheetProfile }, set: { qrSheetProfile = $0 })
     }
-
-    // MARK: - 复制链接 / 文件导入导出
 
     private func copyLink(_ profile: ProxyProfile) {
         let link = VlessLink.build(from: profile)
@@ -233,8 +223,6 @@ struct ProfilesView: View {
         }
     }
 
-    // MARK: - 从 vless 链接导入
-
     private var linkImportSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("从链接导入节点").font(.headline)
@@ -279,7 +267,6 @@ struct ProfilesView: View {
     }
 }
 
-/// 新增/编辑节点用的表单弹窗，内部复用 ConfigFormFields（多加一个"节点名称"字段）。
 struct ProfileEditSheet: View {
     @State var profile: ProxyProfile
     let isNew: Bool
@@ -318,7 +305,6 @@ struct ProfileEditSheet: View {
                 .padding(20)
             }
             .onAppear {
-                // 弹窗一打开就能直接开始打字，不用先点一下才能输入。
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     nameFieldFocused = true
                 }

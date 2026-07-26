@@ -1,10 +1,5 @@
 import SwiftUI
 
-// 用老式的 NavigationView + tag/selection 版 NavigationLink 实现侧边栏，
-// 不用 NavigationSplitView——那个是 macOS 13+ 才有的 API，用了整个 App
-// 就没法在 macOS 12 及更早的系统上跑。这一套写法从 SwiftUI 刚出来
-// （macOS 10.15）就能用，是长期以来的标准做法，兼容性好很多。
-// 视觉效果和之前完全一样，只是底层容器换了一种写法。
 struct MainContentView: View {
     @EnvironmentObject var store: AppStore
 
@@ -13,13 +8,9 @@ struct MainContentView: View {
             SidebarView()
                 .frame(minWidth: 200, idealWidth: 220, maxWidth: 260)
 
-            // 没有任何一项被选中时（理论上不会发生，selectedSection 有默认值），
-            // 给个占位视图，避免 NavigationView 在双栏模式下显示空白。
             Text("请从左侧选择一个页面")
                 .foregroundStyle(.secondary)
         }
-        // 不需要显式指定 navigationViewStyle：macOS 上 NavigationView 给两个
-        // 子视图时，默认就是侧边栏+详情的双栏布局，这是平台自带的行为。
     }
 }
 
@@ -28,7 +19,6 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // 顶部标题区，对应截图左上角的盾牌图标 + "VlessProxy" + 运行状态
             HStack(spacing: 10) {
                 Image(systemName: "shield.lefthalf.filled")
                     .font(.system(size: 22))
@@ -71,7 +61,6 @@ struct SidebarView: View {
 
             Divider()
 
-            // 底部固定显示当前监听地址，对应截图左下角 "监听端口 127.0.0.1:1088"
             VStack(alignment: .leading, spacing: 2) {
                 Text("监听端口").font(.caption2).foregroundStyle(.secondary)
                 Text(listenAddrText)

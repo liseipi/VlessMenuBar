@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// 纯粹的表单字段集合（不含节点名称、不含保存/取消按钮），
-/// 被 ProfileEditSheet 包一层节点名称 + 按钮之后使用。
-/// 抽出来是因为"新增节点"和"编辑节点"用的是同一套字段，只是外层壳不一样。
 struct ConfigFormFields: View {
     @Binding var config: ProxyConfig
     @State private var showAdvanced = false

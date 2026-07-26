@@ -1,18 +1,7 @@
 import Foundation
 
-/// vless:// 分享链接的生成与解析。
-/// 格式沿用社区里 v2rayN / Xray 等工具通用的写法：
-///   vless://{uuid}@{host}:{port}?encryption=none&security=tls&type=ws&host={wsHost}&path={path}&sni={sni}#{备注}
-/// 额外加了一个非标准的 `token` 查询参数，用来带上我们自己协议里的鉴权 Token
-/// （标准 VLESS 协议没有这个概念，其他工具会直接忽略这个参数，不影响兼容性）。
-///
-/// 编解码逻辑已经用等价算法在 Python 里跑过一遍往返测试（中文名称、emoji、
-/// 路径/token 里带 &、=、# 等特殊字符都覆盖到了），这里是照着验证过的逻辑翻译过来的。
 enum VlessLink {
 
-    /// 只保留 RFC 3986 "unreserved" 字符不转义，其余全部按 UTF-8 字节百分号编码。
-    /// 用最严格的字符集是为了保证任何字符（包括中文、emoji、&=?#这些查询字符串
-    /// 里有特殊含义的符号）都能被安全地放进 URL 的某一段里，不会和分隔符混淆。
     private static let unreservedCharacters: CharacterSet = {
         var set = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
         set.insert(charactersIn: "-._~")
@@ -27,7 +16,6 @@ enum VlessLink {
         s.removingPercentEncoding ?? s
     }
 
-    /// 把一个节点生成分享链接。
     static func build(from profile: ProxyProfile) -> String {
         let c = profile.config
         var query: [(String, String)] = [
@@ -49,7 +37,6 @@ enum VlessLink {
         return "vless://\(c.uuid)@\(c.host):\(c.port)?\(queryString)#\(remark)"
     }
 
-    /// 解析一个 vless:// 链接，失败返回 nil（格式不对、缺 host/port/uuid 等）。
     static func parse(_ link: String) -> ProxyProfile? {
         let trimmed = link.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("vless://") else { return nil }

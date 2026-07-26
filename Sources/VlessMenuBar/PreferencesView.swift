@@ -53,7 +53,7 @@ struct PreferencesView: View {
             errorMessage = nil
         case .failure(let error):
             errorMessage = error.localizedDescription
-            loginItemEnabled = LoginItemManager.isEnabled // 回滚成实际状态
+            loginItemEnabled = LoginItemManager.isEnabled
         }
     }
 }

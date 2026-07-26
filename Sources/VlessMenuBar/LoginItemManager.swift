@@ -1,21 +1,6 @@
 import Foundation
 import ServiceManagement
 
-/// 开机自启动。
-///
-/// macOS 13+ 用 `SMAppService.mainApp`，这是苹果目前推荐的方式，不需要单独
-/// 安装 LaunchAgent 文件，跟"系统设置 -> 通用 -> 登录项"里的开关是同一套东西。
-///
-/// macOS 12 及更早的系统没有 `SMAppService`（这是 Ventura 才引入的 API），
-/// 用一个手写的 LaunchAgent plist 兜底：往 `~/Library/LaunchAgents/` 写一份
-/// 配置文件，登录时 launchd 会按这份配置自动拉起这个 App。效果上跟
-/// SMAppService 类似，只是不会出现在"系统设置 -> 登录项"那个列表里
-/// （旧系统本来也没有这个统一列表）。
-///
-/// 前提：这个可执行文件必须是从一个正经的 .app 包里跑起来的
-/// （即 Bundle.main 是 .../VlessMenuBar.app/Contents/MacOS/VlessMenuBar 这种结构），
-/// 直接用 `swift run` 跑源码或者裸执行 SwiftPM 编译出来的二进制是不行的——
-/// 详见 README 里 build-app.sh 脚本，负责把编译产物打包成正经 .app。
 enum LoginItemManager {
 
     static var isEnabled: Bool {
@@ -46,7 +31,6 @@ enum LoginItemManager {
         }
     }
 
-    /// 人类可读的状态描述，方便在菜单里显示或者出错时提示用户去系统设置里看看。
     static var statusDescription: String {
         if #available(macOS 13.0, *) {
             switch SMAppService.mainApp.status {
@@ -60,8 +44,6 @@ enum LoginItemManager {
             return legacyPlistExists() ? "已启用（LaunchAgent）" : "未启用"
         }
     }
-
-    // MARK: - macOS 12 及更早系统的兜底实现（手写 LaunchAgent plist）
 
     private static let legacyLabel = "com.vlessmenubar.loginitem"
 

@@ -7,13 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = AppStore()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // .accessory：不出现在 Dock 里、没有顶部菜单栏菜单，纯靠状态栏图标 + 主窗口交互。
         NSApp.setActivationPolicy(.accessory)
 
-        // 必须有这一步：Cmd+C / Cmd+V / Cmd+X / Cmd+A 这些标准编辑快捷键在 macOS 上
-        // 是通过"主菜单里有没有对应的 Edit 菜单项"来路由的，不是文本框自己天生就会
-        // 响应这几个按键。.accessory 策略的 App 默认没有主菜单，不设置的话
-        // 所有表单文本框都没法用快捷键复制粘贴，只能靠右键菜单（如果有的话）。
         buildMainMenu()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -26,14 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showMainWindow()
     }
 
-    // MARK: - 主菜单
-
-    /// 构建一个最小但完整的标准 macOS 主菜单：App 菜单（关于/退出）+ Edit 菜单
-    /// （剪切/拷贝/粘贴/全选/撤销/重做）。这里的菜单项全部用标准选择器
-    /// （cut:/copy:/paste:/selectAll: 等）配 target: nil，意思是"谁是当前第一
-    /// 响应者就交给谁处理"——不需要自己写这些方法的实现，NSTextField/NSTextView
-    /// 内部已经实现好了，只是需要菜单系统把 Cmd+C 这类按键"翻译"成对应的动作
-    /// 消息发出去，没有菜单就没有这层翻译。
     private func buildMainMenu() {
         let mainMenu = NSMenu()
 
@@ -63,12 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        // 关掉主窗口不等于退出 App——这是个常驻状态栏工具，
-        // 只有点菜单里的"退出"或者 Cmd+Q 才真正退出。
         false
     }
-
-    // MARK: - 主窗口
 
     private func buildMainWindow() {
         let content = MainContentView().environmentObject(store)
@@ -83,10 +66,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showMainWindow() {
-        // 不再切成 .regular——不管主窗口开不开，这个 App 都只保留菜单栏图标，
-        // 不出现在 Dock（底部任务栏）里。.accessory 策略下的 App 一样可以正常
-        // 显示窗口、接收键盘输入、弹出自己的菜单栏（Cmd+C/V 那些也一样能用），
-        // 唯一的区别就是不占 Dock 图标。
         NSApp.activate(ignoringOtherApps: true)
         mainWindow?.makeKeyAndOrderFront(nil)
     }
@@ -104,10 +83,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// 右键状态栏图标：不用打开主窗口就能做的几个高频操作。
-    /// 用 NSMenu.popUpContextMenu 直接弹出菜单，不要用 "赋值给 statusItem.menu
-    /// 再 performClick" 那种技巧——那样会导致 performClick 又触发一次
-    /// statusItemClicked，形成递归调用。
     private func showQuickMenu(with event: NSEvent) {
         let menu = NSMenu()
         let toggleTitle = store.isRunning ? "停止代理" : "启动代理"

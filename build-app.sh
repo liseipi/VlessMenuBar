@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# 把 SwiftPM 编译出来的可执行文件，组装成一个正经的 macOS .app 包。
-#
-# 为什么需要这一步而不是直接运行 `swift build` 出来的二进制：
-#   1. 开机自启动（SMAppService）要求 Bundle.main 是标准 .app 结构。
-#   2. 菜单栏应用如果不是 .app，Finder/启动台不好管理，双击体验也不对。
-#
-# 用法：
-#   ./build-app.sh            # Release 构建（默认）
-#   ./build-app.sh debug      # Debug 构建，编译快，方便调试
-
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -16,32 +6,59 @@ CONFIG="${1:-release}"
 APP_NAME="VlessMenuBar"
 APP_DIR="dist/${APP_NAME}.app"
 
-# 关键一步：清掉源码目录里（尤其是 Sources/VlessMenuBar/Resources/ 下内嵌的
-# 两个 vless-ws-client 二进制）的隔离属性。这几个文件从你最初下载解压项目
-# 压缩包开始就带着这个属性，SwiftPM 编译时只是原样拷贝文件（不会自动清掉
-# 属性），所以就算之前对编译出来的 .app 用 xattr 清过，只要重新跑一次这个
-# 脚本又会用带着隔离属性的源文件重新生成一份新的，等于每次重新打包都"复发"。
-# 从源头清一次，之后每次编译出来的东西就都是干净的。
 echo "==> 清除源文件的隔离属性（一次性，之后不会再复发）"
 xattr -cr . 2>/dev/null || true
 
-echo "==> swift build (-c ${CONFIG})"
-swift build -c "${CONFIG}"
-xattr -cr .build 2>/dev/null || true  # 防止用到编译缓存里遗留的隔离属性
+echo "==> swift build（分别编译 arm64 + x86_64，再合并成通用二进制）"
+swift build -c "${CONFIG}" --arch arm64
+swift build -c "${CONFIG}" --arch x86_64
+xattr -cr .build 2>/dev/null || true
 
-BIN_PATH=".build/${CONFIG}/${APP_NAME}"
-if [ ! -f "$BIN_PATH" ]; then
-  echo "找不到编译产物: $BIN_PATH" >&2
+echo "==> 定位编译产物"
+ARM64_BIN=""
+X86_64_BIN=""
+while IFS= read -r bin; do
+  arch="$(lipo -archs "$bin" 2>/dev/null || true)"
+  case "$arch" in
+    *arm64*) ARM64_BIN="$bin" ;;
+  esac
+  case "$arch" in
+    *x86_64*) X86_64_BIN="$bin" ;;
+  esac
+done < <(find .build -type f -path "*/${CONFIG}/*" -name "${APP_NAME}" -perm -u+x 2>/dev/null)
+
+if [ -z "$ARM64_BIN" ] || [ -z "$X86_64_BIN" ]; then
+  echo "错误：没能在 .build 目录下找到两种架构的可执行文件" >&2
+  echo "找到的候选文件：" >&2
+  find .build -type f -name "${APP_NAME}" -perm -u+x 2>/dev/null | sed 's/^/  /' >&2
   exit 1
 fi
+echo "  arm64  -> $ARM64_BIN"
+echo "  x86_64 -> $X86_64_BIN"
+
+RESOURCE_BUNDLE="$(find .build -type d -path "*/${CONFIG}/*" -name "${APP_NAME}_VlessMenuBar.bundle" 2>/dev/null | head -1)"
+if [ -z "$RESOURCE_BUNDLE" ]; then
+  echo "错误：没能在 .build 目录下找到资源包 (${APP_NAME}_VlessMenuBar.bundle)，" >&2
+  echo "里面应该内含两个 vless-ws-client 二进制。没有这个资源包，App 编译" >&2
+  echo "出来能正常打开，但点击「连接」时会因为找不到内嵌的可执行文件而崩溃。" >&2
+  exit 1
+fi
+echo "  资源包 -> $RESOURCE_BUNDLE"
+
+UNIVERSAL_BIN="$(mktemp -d)/${APP_NAME}"
+lipo -create "$ARM64_BIN" "$X86_64_BIN" -output "$UNIVERSAL_BIN"
+echo "==> 通用二进制包含的架构：$(lipo -archs "$UNIVERSAL_BIN")"
 
 echo "==> 组装 .app 包结构"
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
-cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/${APP_NAME}"
+cp "$UNIVERSAL_BIN" "$APP_DIR/Contents/MacOS/${APP_NAME}"
 cp Info.plist "$APP_DIR/Contents/Info.plist"
+mkdir -p "$APP_DIR/Contents/Helpers"
+cp "$RESOURCE_BUNDLE/vless-ws-client-darwin-arm64" "$APP_DIR/Contents/Helpers/"
+cp "$RESOURCE_BUNDLE/vless-ws-client-darwin-amd64" "$APP_DIR/Contents/Helpers/"
 
 echo "==> 生成 App 图标 (iconutil 是 macOS 自带工具，把 iconset 转成 icns)"
 if [ -d "AppIcon.iconset" ]; then
@@ -50,16 +67,18 @@ else
   echo "警告：没找到 AppIcon.iconset，App 会用系统默认图标" >&2
 fi
 
-# SwiftPM 的资源包（内含两个 vless-ws-client 二进制）跟主执行文件放在一起，
-# Bundle.module 在运行时会在可执行文件同目录找 xxx_VlessMenuBar.bundle。
-RESOURCE_BUNDLE=".build/${CONFIG}/${APP_NAME}_VlessMenuBar.bundle"
-if [ -d "$RESOURCE_BUNDLE" ]; then
-  cp -R "$RESOURCE_BUNDLE" "$APP_DIR/Contents/MacOS/"
-else
-  echo "警告：没找到资源 bundle ($RESOURCE_BUNDLE)，两个 vless-ws-client 二进制可能没打包进去" >&2
+echo "==> 校验：确认资源包里两个二进制确实被打包进去了"
+if [ ! -f "$APP_DIR/Contents/Helpers/vless-ws-client-darwin-arm64" ] || \
+   [ ! -f "$APP_DIR/Contents/Helpers/vless-ws-client-darwin-amd64" ]; then
+  echo "错误：打包完成后检查发现两个 vless-ws-client 二进制不在预期位置，App 会在" >&2
+  echo "点击「连接」时崩溃。请检查上面「资源包」那一行路径是否正确。" >&2
+  exit 1
 fi
+echo "  确认无误：两个 vless-ws-client 二进制都在资源包里"
 
 echo "==> ad-hoc 签名（不是正式开发者签名，只是让系统能正常识别/运行这个 App）"
+codesign --force --sign - "$APP_DIR/Contents/Helpers/vless-ws-client-darwin-arm64"
+codesign --force --sign - "$APP_DIR/Contents/Helpers/vless-ws-client-darwin-amd64"
 codesign --force --deep --sign - "$APP_DIR"
 
 echo "==> 完成：$APP_DIR"

@@ -12,7 +12,7 @@ struct QRCodeSheet: View {
 
             if let image = QRCodeGenerator.generate(from: link) {
                 Image(nsImage: image)
-                    .interpolation(.none) // 保持二维码块状边缘清晰，不做平滑插值
+                    .interpolation(.none)
                     .resizable()
                     .frame(width: 240, height: 240)
             } else {

@@ -22,7 +22,7 @@ struct LocalProxyView: View {
                         Text("本地 IP").font(.caption).foregroundStyle(.secondary)
                         TextField("127.0.0.1", text: $draft.localIP)
                             .textFieldStyle(.roundedBorder)
-                            .disabled(draft.lanEnabled) // 开了局域网共享就固定是 0.0.0.0，不让手动改，避免和开关打架
+                            .disabled(draft.lanEnabled)
                     }
                     VStack(alignment: .leading, spacing: 4) {
                         Text("本地端口").font(.caption).foregroundStyle(.secondary)
@@ -129,7 +129,6 @@ struct LocalProxyView: View {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
-    /// 列出本机所有局域网 IPv4 地址（en0/en1 等网卡，排除回环和链路本地地址）。
     private static func localIPv4Addresses() -> [String] {
         var addresses: [String] = []
         var ifaddrPtr: UnsafeMutablePointer<ifaddrs>?
@@ -143,7 +142,7 @@ struct LocalProxyView: View {
             guard addr.sa_family == UInt8(AF_INET) else { continue }
 
             let name = String(cString: current.pointee.ifa_name)
-            guard name.hasPrefix("en") else { continue } // en0/en1 通常是 Wi-Fi/以太网
+            guard name.hasPrefix("en") else { continue }
 
             var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
             getnameinfo(current.pointee.ifa_addr, socklen_t(current.pointee.ifa_addr.pointee.sa_len),
