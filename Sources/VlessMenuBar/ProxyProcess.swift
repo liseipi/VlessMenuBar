@@ -68,6 +68,7 @@ final class ProxyProcess {
         var ret: Int32 = 0
         var size = MemoryLayout<Int32>.size
         let result = sysctlbyname("sysctl.proc_translated", &ret, &size, nil, 0)
+
         return result == 0 && ret == 1
     }
 
@@ -94,6 +95,7 @@ final class ProxyProcess {
                 proc.terminationHandler = { [weak self] p in
                     guard let self else { return }
                     DispatchQueue.main.async {
+
                         guard self.process === p else { return }
                         if p.terminationStatus == 0 {
                             self.updateStatus(.stopped)
@@ -131,6 +133,7 @@ final class ProxyProcess {
             updateStatus(.stopped)
             return
         }
+
         process = nil
         stdoutPipe = nil
         stderrPipe = nil

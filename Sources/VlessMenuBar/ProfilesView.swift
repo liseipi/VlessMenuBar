@@ -305,6 +305,7 @@ struct ProfileEditSheet: View {
                 .padding(20)
             }
             .onAppear {
+
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     nameFieldFocused = true
                 }

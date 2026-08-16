@@ -69,6 +69,7 @@ final class AppStore: ObservableObject {
         profiles[idx] = profile
         persistProfiles()
         if profile.id == activeProfileID, isRunning {
+
             restart()
         }
     }
@@ -148,6 +149,7 @@ final class AppStore: ObservableObject {
         startedAt = Date()
         uptimeSeconds = 0
         uptimeTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+
             DispatchQueue.main.async {
                 guard let self, let startedAt = self.startedAt else { return }
                 self.uptimeSeconds = Int(Date().timeIntervalSince(startedAt))

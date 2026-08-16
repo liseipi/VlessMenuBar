@@ -11,6 +11,7 @@ struct MainContentView: View {
             Text("请从左侧选择一个页面")
                 .foregroundStyle(.secondary)
         }
+
     }
 }
 
@@ -19,6 +20,7 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+
             HStack(spacing: 10) {
                 Image(systemName: "shield.lefthalf.filled")
                     .font(.system(size: 22))

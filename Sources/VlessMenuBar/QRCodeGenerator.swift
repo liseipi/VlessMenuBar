@@ -3,6 +3,7 @@ import CoreImage.CIFilterBuiltins
 import AppKit
 
 enum QRCodeGenerator {
+
     static func generate(from string: String, scale: CGFloat = 10) -> NSImage? {
         guard let data = string.data(using: .utf8) else { return nil }
 
