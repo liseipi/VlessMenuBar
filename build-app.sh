@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# 强制全量重建：rm -rf .build dist
+# 然后重新执行 ./build-app.sh
+
 set -euo pipefail
 cd "$(dirname "$0")"
 
