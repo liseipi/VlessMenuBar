@@ -1,10 +1,12 @@
 import AppKit
 import SwiftUI
+import Combine
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var mainWindow: NSWindow?
     private let store = AppStore()
+    private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
 
@@ -13,13 +15,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMainMenu()
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "bolt.circle", accessibilityDescription: "VlessProxy")
         statusItem.button?.target = self
         statusItem.button?.action = #selector(statusItemClicked)
         statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        updateStatusIcon(isRunning: store.isRunning)
+
+        store.$proxyStatus
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] status in
+                if case .running = status {
+                    self?.updateStatusIcon(isRunning: true)
+                } else {
+                    self?.updateStatusIcon(isRunning: false)
+                }
+            }
+            .store(in: &cancellables)
 
         buildMainWindow()
         showMainWindow()
+    }
+
+    private func updateStatusIcon(isRunning: Bool) {
+        let symbolName = isRunning ? "shield.fill" : "shield.slash"
+        statusItem.button?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "VlessProxy")
     }
 
     private func buildMainMenu() {
