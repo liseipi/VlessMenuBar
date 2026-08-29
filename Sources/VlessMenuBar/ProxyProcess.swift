@@ -76,6 +76,9 @@ final class ProxyProcess {
         stop()
         updateStatus(.starting)
 
+        let localPort = local.localPort
+        let recentOutputBox = RecentOutputBox()
+
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
@@ -89,8 +92,8 @@ final class ProxyProcess {
                 proc.standardOutput = outPipe
                 proc.standardError = errPipe
 
-                self.attachLogReader(pipe: outPipe)
-                self.attachLogReader(pipe: errPipe)
+                self.attachLogReader(pipe: outPipe, recentOutputBox: recentOutputBox)
+                self.attachLogReader(pipe: errPipe, recentOutputBox: recentOutputBox)
 
                 proc.terminationHandler = { [weak self] p in
                     guard let self else { return }
@@ -101,6 +104,9 @@ final class ProxyProcess {
                             self.updateStatus(.stopped)
                         } else {
                             self.updateStatus(.failed("进程退出，退出码 \(p.terminationStatus)，具体原因看日志"))
+                            if Self.isPortInUseError(recentOutputBox.value) {
+                                self.onLogLine?("[提示] 本地端口 \(localPort) 可能已被占用，可在终端执行以下命令释放端口后重新启动：\nsudo lsof -ti :\(localPort) | xargs kill -9\n")
+                            }
                         }
                     }
                 }
@@ -122,9 +128,50 @@ final class ProxyProcess {
             } catch {
                 DispatchQueue.main.async {
                     self.updateStatus(.failed(error.localizedDescription))
+                    if Self.isPortInUseError(error.localizedDescription) {
+                        self.onLogLine?("[提示] 本地端口 \(localPort) 可能已被占用，可在终端执行以下命令释放端口后重新启动：\nsudo lsof -ti :\(localPort) | xargs kill -9\n")
+                    }
                 }
             }
         }
+    }
+
+    /// 简单容器，用来在多个闭包（读日志的 handler、terminationHandler）之间
+    /// 安全地共享"最近输出内容"，用于判断是否是端口被占用导致的启动失败。
+    private final class RecentOutputBox {
+        private let lock = NSLock()
+        private var text = ""
+        private let maxLength = 4000
+
+        var value: String {
+            lock.lock()
+            defer { lock.unlock() }
+            return text
+        }
+
+        func append(_ chunk: String) {
+            lock.lock()
+            text += chunk
+            if text.count > maxLength {
+                text = String(text.suffix(maxLength))
+            }
+            lock.unlock()
+        }
+    }
+
+    /// 根据进程输出内容判断是否是"端口已被占用"导致的启动失败。
+    /// 覆盖常见的中英文报错关键字（Go net 包 / 系统调用常见措辞）。
+    private static func isPortInUseError(_ text: String) -> Bool {
+        let lowered = text.lowercased()
+        let keywords = [
+            "address already in use",
+            "bind: address already in use",
+            "port is already in use",
+            "端口已被占用",
+            "地址已被使用",
+            "eaddrinuse",
+        ]
+        return keywords.contains { lowered.contains($0) }
     }
 
     func stop() {
@@ -141,10 +188,11 @@ final class ProxyProcess {
         proc.terminate()
     }
 
-    private func attachLogReader(pipe: Pipe) {
+    private func attachLogReader(pipe: Pipe, recentOutputBox: RecentOutputBox) {
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
+            recentOutputBox.append(text)
             DispatchQueue.main.async {
                 self?.onLogLine?(text)
             }
