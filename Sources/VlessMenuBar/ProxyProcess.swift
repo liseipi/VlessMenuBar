@@ -18,8 +18,10 @@ final class ProxyProcess {
 
     var isRunning: Bool { process?.isRunning ?? false }
 
-    private func resolveBinaryURL() throws -> URL {
-        let arch = Self.currentArch()
+    /// tun 模式（TunRunner）复用同一份可执行文件和架构探测逻辑，所以这两个方法
+    /// 从 private 改成 internal（同一个 module 内可见）。
+    static func resolveBinaryURL() throws -> URL {
+        let arch = currentArch()
         let resourceName = arch == "arm64"
             ? "vless-ws-client-darwin-arm64"
             : "vless-ws-client-darwin-amd64"
@@ -41,7 +43,7 @@ final class ProxyProcess {
         return url
     }
 
-    private func ensureExecutable(_ url: URL) throws {
+    private static func ensureExecutable(_ url: URL) throws {
         var attrs = try FileManager.default.attributesOfItem(atPath: url.path)
         let currentPerm = (attrs[.posixPermissions] as? NSNumber)?.uint16Value ?? 0
         if currentPerm & 0o111 == 0 {
@@ -50,7 +52,7 @@ final class ProxyProcess {
         }
     }
 
-    private static func currentArch() -> String {
+    static func currentArch() -> String {
         if isRunningUnderRosetta() {
             return "arm64"
         }
@@ -82,7 +84,7 @@ final class ProxyProcess {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             do {
-                let binaryURL = try self.resolveBinaryURL()
+                let binaryURL = try Self.resolveBinaryURL()
                 let proc = Process()
                 proc.executableURL = binaryURL
                 proc.arguments = config.commandLineArguments(local: local)
