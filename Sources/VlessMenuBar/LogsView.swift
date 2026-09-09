@@ -1,13 +1,20 @@
 import SwiftUI
+import AppKit
 
 struct LogsView: View {
     @EnvironmentObject var store: AppStore
+    @State private var justCopied = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("运行日志").font(.title2).bold()
                 Spacer()
+                if justCopied {
+                    Text("已复制").font(.caption).foregroundStyle(.green)
+                }
+                Button("复制") { copyLogs() }
+                    .disabled(store.logLines.isEmpty)
                 Button("清空") { store.clearLogs() }
             }
             .padding(20)
@@ -41,5 +48,13 @@ struct LogsView: View {
                 }
             }
         }
+    }
+
+    private func copyLogs() {
+        let text = store.logLines.joined(separator: "\n")
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        justCopied = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { justCopied = false }
     }
 }
