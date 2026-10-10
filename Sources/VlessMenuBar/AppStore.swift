@@ -39,6 +39,11 @@ final class AppStore: ObservableObject {
 
     private let proxyProcess = ProxyProcess()
     private let tunRunner = TunRunner()
+    private let wakeMonitor = SleepWakeMonitor()
+    /// 用户"想让代理保持运行"的意图：点了启动 = true，点了停止/退出 = false。
+    /// 睡眠唤醒、网络切换后的自动重连只在这个标志为 true 时才会发生。
+    private var shouldBeRunning = false
+    private var reconnectWork: DispatchWorkItem?
     private var uptimeTimer: Timer?
     private var startedAt: Date?
     private let maxLogLines = 2000
@@ -83,6 +88,9 @@ final class AppStore: ObservableObject {
         tunRunner.onLogLine = { [weak self] line in
             DispatchQueue.main.async { self?.appendLog("[tun] " + line) }
         }
+
+        wakeMonitor.onWake = { [weak self] in self?.handleSystemWake() }
+        wakeMonitor.onNetworkChanged = { [weak self] in self?.handleNetworkChanged() }
     }
 
     func addProfile(_ profile: ProxyProfile) {
@@ -132,28 +140,105 @@ final class AppStore: ObservableObject {
     }
 
     func start() {
+        if startProxyProcess() { shouldBeRunning = true }
+    }
+
+    /// 真正启动子进程。校验失败返回 false。不改动 shouldBeRunning，
+    /// 这样自动重连可以复用而不会改变用户意图。
+    @discardableResult
+    private func startProxyProcess() -> Bool {
         guard let profile = activeProfile else {
             proxyStatus = .failed("还没有任何节点，请先去「代理配置」新增一个")
-            return
+            return false
         }
         if let err = localSettings.validationError() {
             proxyStatus = .failed("本地代理设置有问题：\(err)")
-            return
+            return false
         }
         if let err = profile.config.validationError() {
             proxyStatus = .failed("当前节点「\(profile.name)」配置不完整：\(err)")
             appendLog("[界面] 无法启动：\(err)\n")
-            return
+            return false
         }
         proxyProcess.start(config: profile.config, local: localSettings)
         startUptimeTimer()
+        return true
     }
 
     func stop() {
+        shouldBeRunning = false
+        reconnectWork?.cancel()
+        reconnectWork = nil
         proxyProcess.stop()
         stopUptimeTimer()
         if systemProxyIsOn {
             stopActiveSystemProxy()
+        }
+    }
+
+    // MARK: - 睡眠唤醒 / 网络切换后的自动重连
+
+    private func handleSystemWake() {
+        if activeSystemProxyMode == .tun {
+            // tun 模式的子进程是 root 权限，重启需要再弹管理员密码框，
+            // 不适合在唤醒瞬间自动做，这里只提示。
+            appendLog("[自动重连] 系统已唤醒。tun 模式需要管理员权限才能重建，如果连不上请手动关闭再开启系统代理\n")
+        }
+        guard shouldBeRunning else { return }
+        appendLog("[自动重连] 检测到系统从睡眠中唤醒，等待网络恢复…\n")
+        waitForNetworkThenReconnect(reason: "系统唤醒", deadline: Date().addingTimeInterval(20))
+    }
+
+    private func handleNetworkChanged() {
+        guard shouldBeRunning else { return }
+        // 网络刚恢复/切换，给 DHCP、DNS 一点时间稳定。同一时间段内多次触发会合并成一次。
+        scheduleReconnect(reason: "网络已恢复或切换", after: 2.0)
+    }
+
+    /// 唤醒后 Wi-Fi 往往要几秒才重新连上，网络没好就重启进程只会马上又失败。
+    private func waitForNetworkThenReconnect(reason: String, deadline: Date) {
+        if wakeMonitor.isNetworkSatisfied || Date() > deadline {
+            scheduleReconnect(reason: reason, after: 2.0)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self, self.shouldBeRunning else { return }
+                self.waitForNetworkThenReconnect(reason: reason, deadline: deadline)
+            }
+        }
+    }
+
+    /// 防抖：新的重连请求会取消还没执行的旧请求。
+    private func scheduleReconnect(reason: String, after delay: TimeInterval, attempt: Int = 0) {
+        reconnectWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.performReconnect(reason: reason, attempt: attempt)
+        }
+        reconnectWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    /// 只重启本地代理子进程，**不**碰系统代理设置（networksetup 的设置本身不会丢，
+    /// 只要本地端口重新有人监听就能用；不能走 restart()，它会顺手把系统代理关掉）。
+    private func performReconnect(reason: String, attempt: Int) {
+        guard shouldBeRunning else { return }
+        appendLog("[自动重连] \(reason)，重启代理进程（第 \(attempt + 1) 次）…\n")
+        proxyProcess.stop()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.shouldBeRunning else { return }
+            guard self.startProxyProcess() else { return }
+
+            // 3 秒后进程已经退出（比如端口还没释放、网络还没通），退避重试，最多 3 次
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+                guard let self, self.shouldBeRunning else { return }
+                guard !self.proxyProcess.isRunning else { return }
+                if attempt < 3 {
+                    let backoff = TimeInterval(2 << attempt) // 2s, 4s, 8s
+                    self.scheduleReconnect(reason: "重启后进程未存活", after: backoff, attempt: attempt + 1)
+                } else {
+                    self.appendLog("[自动重连] 连续重试失败，请检查网络后手动启动\n")
+                }
+            }
         }
     }
 
